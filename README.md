@@ -28,7 +28,7 @@ Supporta sia la conversione di **un singolo file**, sia la conversione **batch**
 
 ---
 
-## 🎛️ Rconverter (Advanced Python Converter)
+## 🎛️ RMusicConverter (Advanced Python Converter)
 
 Uno script Python interattivo e avanzato per la conversione, l'estrazione e la riorganizzazione massiva di librerie audio e video. Funziona come una vera e propria applicazione a riga di comando (CLI) grazie ai suoi menu navigabili (State Machine).
 
