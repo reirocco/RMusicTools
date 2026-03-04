@@ -1,0 +1,271 @@
+#!/usr/bin/env python3
+import os
+import shutil
+import datetime
+import ffmpeg
+import sys
+import time
+import re
+
+AUDIO_EXTS = {'.mp3', '.wav', '.flac', '.m4a', '.aac', '.ogg', '.wma'}
+VIDEO_EXTS = {'.mp4', '.mkv', '.mov', '.avi', '.webm', '.flv', '.wmv'}
+
+def get_timestamp_dir():
+    return datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+
+def print_progress_bar(iteration, total, prefix='', suffix='', length=40, fill='█'):
+    percent = ("{0:.1f}").format(100 * (iteration / float(total)))
+    filled_length = int(length * iteration // total)
+    bar = fill * filled_length + '-' * (length - filled_length)
+    if len(suffix) > 20: suffix = suffix[:17] + "..."
+    sys.stdout.write(f'\r{prefix} |{bar}| {percent}% {suffix}')
+    sys.stdout.flush()
+    if iteration == total:
+        print()
+
+def sanitize_filename(filename):
+    name, ext = os.path.splitext(filename)
+    clean_name = re.sub(r'[^\w\s-]', '', name).strip()
+    clean_name = re.sub(r'[-\s]+', '_', clean_name)
+    return f"{clean_name}{ext.lower()}"
+
+def remove_empty_folders(path):
+    """Elimina ricorsivamente tutte le cartelle vuote in un percorso."""
+    if not os.path.isdir(path):
+        return
+    for f in os.listdir(path):
+        full_path = os.path.join(path, f)
+        if os.path.isdir(full_path):
+            remove_empty_folders(full_path)
+    if len(os.listdir(path)) == 0:
+        try:
+            os.rmdir(path)
+        except OSError:
+            pass
+
+def process_file(input_path, output_path, requires_ffmpeg, **kwargs):
+    try:
+        if requires_ffmpeg:
+            (
+                ffmpeg
+                .input(input_path)
+                .output(output_path, **kwargs)
+                .overwrite_output()
+                .run(quiet=True)
+            )
+        else:
+            shutil.copy2(input_path, output_path)
+        return True
+    except Exception:
+        return False
+
+def select_directory(prompt_text):
+    """Mostra un menu numerato con opzioni per tornare indietro (B) o uscire (Q)."""
+    while True:
+        print(f"\n\033[93m{prompt_text}\033[0m")
+        dirs = [d for d in os.listdir('.') if os.path.isdir(d) and not d.startswith('.')]
+        dirs.sort()
+
+        print("  0) [Directory Corrente: .]")
+        for i, d in enumerate(dirs, 1):
+            print(f"  {i}) {d}/")
+        print("  M) [Inserisci un percorso manualmente]")
+        print("  \033[96mB) [Torna al menu precedente]\033[0m")
+        print("  \033[91mQ) [Esci dal programma]\033[0m")
+
+        choice = input("\nScegli un'opzione: ").strip().upper()
+        if choice == '0':
+            return "."
+        elif choice == 'B':
+            return "BACK"
+        elif choice == 'Q':
+            return "QUIT"
+        elif choice == 'M':
+            manual_path = input("Inserisci il percorso (oppure 'B' per annullare): ").strip()
+            if manual_path.upper() == 'B':
+                continue
+            return manual_path if manual_path else "."
+        elif choice.isdigit():
+            idx = int(choice) - 1
+            if 0 <= idx < len(dirs):
+                return dirs[idx]
+        print("\033[91mScelta non valida, riprova.\033[0m")
+
+def main():
+    print("\033[94m" + "===============================================" + "\033[0m")
+    print("\033[94m" + "   Rconverter: Power Management v8.0 (Loop)    " + "\033[0m")
+    print("\033[94m" + "===============================================" + "\033[0m")
+
+    # MASTER LOOP: Il programma continua a girare finché non si preme 'Q'
+    while True:
+        # Reset delle variabili ad ogni nuovo ciclo
+        scelta = src_dir = dest_parent = audio_ext = video_ext = ""
+        output_kwargs = {}
+        modify_metadata = False
+        step = 1
+
+        while step <= 5:
+            if step == 1:
+                print("\n\033[92m[Fase 1/5] Azione Principale\033[0m")
+                print("1) Converti/Elabora file nella Working Directory")
+                print("2) Converti/Elabora file in una cartella specifica")
+                print("3) Estrarre (Taglia/Incolla) tutti i file dalle sottocartelle (FLATTEN)")
+                print("\033[91mQ) [Esci dal programma]\033[0m")
+
+                scelta = input("\nScelta: ").strip().upper()
+                if scelta == 'Q':
+                    print("\nUscita dal programma. A presto!\n")
+                    return # Chiude completamente lo script
+                if scelta in ['1', '2', '3']: step = 2
+                else: print("\033[91mScelta non valida.\033[0m")
+
+            elif step == 2:
+                print("\n\033[92m[Fase 2/5] Cartella Sorgente\033[0m")
+                if scelta in ['2', '3']:
+                    src_dir = select_directory("Seleziona la cartella SORGENTE:")
+                    if src_dir == "QUIT": return
+                    if src_dir == "BACK": step = 1; continue
+                    if not os.path.exists(src_dir):
+                        print("\033[91mErrore: Cartella inesistente.\033[0m")
+                        continue
+                else:
+                    src_dir = "."
+                step = 3
+
+            elif step == 3:
+                print("\n\033[92m[Fase 3/5] Cartella di Destinazione\033[0m")
+                dest_parent = select_directory("Seleziona dove creare la cartella FINALE col timestamp:")
+                if dest_parent == "QUIT": return
+                if dest_parent == "BACK":
+                    step = 2 if scelta in ['2', '3'] else 1
+                    continue
+
+                if not os.path.exists(dest_parent):
+                    print(f"La cartella '{dest_parent}' non esiste. La creo...")
+                    os.makedirs(dest_parent, exist_ok=True)
+                step = 4
+
+            elif step == 4:
+                print("\n\033[92m[Fase 4/5] Formato di Output\033[0m")
+                print("(Lascia vuoto per non convertire il formato originale)")
+                print("\033[96m[B = Indietro | Q = Esci]\033[0m")
+
+                audio_ext = input("Formato per file AUDIO (es. mp3, wav): ").strip()
+                if audio_ext.upper() == 'Q': return
+                if audio_ext.upper() == 'B': step = 3; continue
+
+                video_ext = input("Formato per file VIDEO (es. mp4, mkv): ").strip()
+                if video_ext.upper() == 'Q': return
+                if video_ext.upper() == 'B': continue
+
+                audio_ext = audio_ext.replace(".", "").lower()
+                video_ext = video_ext.replace(".", "").lower()
+                step = 5
+
+            elif step == 5:
+                print("\n\033[92m[Fase 5/5] Gestione Metadati\033[0m")
+                print("1) Mantieni i metadati originali")
+                print("2) Svuota/Rimuovi tutti i metadati")
+                print("3) Inserisci nuovi metadati (Titolo, Artista)")
+                print("\033[96mB) [Torna indietro]\033[0m")
+                print("\033[91mQ) [Esci]\033[0m")
+
+                meta_choice = input("Scelta (1/2/3/B/Q): ").strip().upper()
+                if meta_choice == 'Q': return
+                if meta_choice == 'B': step = 4; continue
+                if meta_choice not in ['1', '2', '3']:
+                    print("\033[91mScelta non valida.\033[0m")
+                    continue
+
+                if meta_choice == '2':
+                    output_kwargs['map_metadata'] = '-1'
+                    modify_metadata = True
+                elif meta_choice == '3':
+                    titolo = input("  -> Nuovo Titolo (Invio per saltare, B per annullare): ").strip()
+                    if titolo.upper() == 'B': continue
+                    artista = input("  -> Nuovo Artista (Invio per saltare, B per annullare): ").strip()
+                    if artista.upper() == 'B': continue
+
+                    output_kwargs['map_metadata'] = '-1'
+                    if titolo: output_kwargs['metadata:g:0'] = f'title={titolo}'
+                    if artista: output_kwargs['metadata:g:1'] = f'artist={artista}'
+                    modify_metadata = True
+
+                step = 6 # Esce dal menu e avvia l'elaborazione
+
+        # === FINE MENU, INIZIO ELABORAZIONE ===
+        dest_dir = os.path.join(dest_parent, get_timestamp_dir())
+        os.makedirs(dest_dir)
+        dest_abs = os.path.abspath(dest_dir)
+
+        files_to_process = []
+        if scelta in ['1', '2']:
+            all_items = [f for f in os.listdir(src_dir) if os.path.isfile(os.path.join(src_dir, f))]
+            files_to_process = [os.path.join(src_dir, f) for f in all_items if f != "Rconverter"]
+        elif scelta == '3':
+            for root, dirs, files in os.walk(src_dir):
+                if os.path.abspath(root) == dest_abs:
+                    continue
+                for f in files:
+                    if f != "Rconverter":
+                        files_to_process.append(os.path.join(root, f))
+
+        total = len(files_to_process)
+        if total == 0:
+            print("\n\033[91mNessun file trovato da elaborare.\033[0m")
+            os.rmdir(dest_dir)
+        else:
+            print(f"\nInizio elaborazione di {total} file...")
+
+            for i, f_path in enumerate(files_to_process):
+                filename = os.path.basename(f_path)
+                orig_ext = os.path.splitext(filename)[1].lower()
+
+                clean_filename = sanitize_filename(filename)
+                clean_name_no_ext = os.path.splitext(clean_filename)[0]
+
+                target_ext = orig_ext.replace(".", "")
+                is_conversion = False
+
+                if orig_ext in AUDIO_EXTS and audio_ext:
+                    target_ext = audio_ext
+                    is_conversion = True
+                elif orig_ext in VIDEO_EXTS and video_ext:
+                    target_ext = video_ext
+                    is_conversion = True
+
+                out_name = f"{clean_name_no_ext}.{target_ext}"
+                dest_path = os.path.join(dest_dir, out_name)
+
+                if os.path.exists(dest_path):
+                    dest_path = os.path.join(dest_dir, f"{clean_name_no_ext}_{int(time.time()*100)}.{target_ext}")
+
+                kwargs_to_use = output_kwargs.copy()
+                if not is_conversion and modify_metadata:
+                    kwargs_to_use['c'] = 'copy'
+
+                requires_ffmpeg = is_conversion or modify_metadata
+
+                success = process_file(f_path, dest_path, requires_ffmpeg, **kwargs_to_use)
+
+                if success and scelta == '3':
+                    try:
+                        os.remove(f_path)
+                    except OSError:
+                        pass
+
+                print_progress_bar(i + 1, total, prefix='Progresso:', suffix=f'({out_name})', length=40)
+
+            if scelta == '3':
+                print("\nPulizia delle cartelle svuotate in corso...")
+                remove_empty_folders(src_dir)
+
+            print(f"\n\033[92mOperazione conclusa! Trovi tutto in: {dest_abs}\033[0m")
+
+        # Pausa prima di ricominciare il ciclo
+        input("\n\033[93mPremi [INVIO] per tornare al menu principale...\033[0m")
+        # Pulisce un po' lo schermo per separare i cicli visivamente
+        print("\n" + "="*50)
+
+if __name__ == "__main__":
+    main()
