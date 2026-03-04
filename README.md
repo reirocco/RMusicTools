@@ -28,14 +28,29 @@ Supporta sia la conversione di **un singolo file**, sia la conversione **batch**
 
 ---
 
+## 🎛️ Rconverter (Advanced Python Converter)
+
+Uno script Python interattivo e avanzato per la conversione, l'estrazione e la riorganizzazione massiva di librerie audio e video. Funziona come una vera e propria applicazione a riga di comando (CLI) grazie ai suoi menu navigabili (State Machine).
+
+### ✨ Funzionalità
+
+- **Menu Interattivo (Loop):** Interfaccia guidata passo-passo. Puoi tornare al menu precedente (`B`) o uscire (`Q`) in qualsiasi momento senza interruzioni improvvise.
+- **Estrazione Ricorsiva (Flatten):** Cerca tutti i file multimediali annidati in decine di sottocartelle e portali in un'unica directory centralizzata rinominata col timestamp di sistema.
+- **Taglia & Incolla Sicuro:** Al termine dell'elaborazione, i file originali vengono rimossi. In caso di errore (es. corruzione del file), l'originale viene mantenuto e viene generato un `error_log.txt`.
+- **Gestione Metadati Avanzata:** Scegli se mantenere i metadati originali, fare uno "strip" totale (rimuovere ogni tag ID3) o sovrascriverli inserendo un nuovo Titolo e Artista.
+- **Auto-Cleanup & Sanitizzazione:** Ripulisce automaticamente i nomi dei file (rimuove parentesi, virgole, simboli strani e spazi) ed elimina le directory che rimangono vuote dopo l'estrazione dei file.
+- **Smart Audio/Video Split:** Riconosce da solo se un file è audio o video. Permette l'estrazione diretta dell'audio dai video senza ricodifiche inutili (modalità `-c copy` quando possibile).
+
+---
+
 ## 🔧 Requisiti
 
-- `bash`
-- `ffmpeg` installato  
-  *Debian/Ubuntu:*  
-  ```bash
-  sudo apt install ffmpeg
+Per utilizzare gli strumenti di questa repository, assicurati di avere i seguenti pacchetti installati:
 
-## Nota
-Questo software è fornito "così com'è" senza alcuna garanzia, come indicato nella Licenza MIT.
-Usalo a tuo rischio.
+- `bash` (per `mp3-converter.sh`)
+- `python3` (per `Rconverter`)
+- `ffmpeg` (motore di conversione base per entrambi gli script)
+
+**Installazione dipendenze di sistema:**
+*Debian/Ubuntu:* ```bash
+sudo apt update && sudo apt install ffmpeg python3
